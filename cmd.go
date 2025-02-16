@@ -60,23 +60,23 @@ var listAllCmd = &cobra.Command{
 		}
 		defer ctrl.instance.Close()
 
-		no, err := cmd.Flags().GetString("no-os")
+		no, err := cmd.Flags().GetBool("no-os")
 		if err != nil {
 			return err
 		}
 
-		if no == "unused" {
-			list, err := ctrl.db.ListAppsOS(ctrl.ctx, getOS())
-			if err != nil {
-				return err
-			}
-			fmt.Print(listAllTableOS(list))
-		} else {
+		if no {
 			list, err := ctrl.db.ListApps(ctrl.ctx)
 			if err != nil {
 				return err
 			}
 			fmt.Print(listAllTable(list))
+		} else {
+			list, err := ctrl.db.ListAppsOS(ctrl.ctx, getOS())
+			if err != nil {
+				return err
+			}
+			fmt.Print(listAllTableOS(list))
 		}
 
 		return nil
@@ -98,10 +98,10 @@ func init() {
 	)
 	rootCmd.AddCommand(addCmd)
 
-	listAllCmd.Flags().StringP(
+	listAllCmd.Flags().BoolP(
 		"no-os",
 		"o",
-		"unused",
+		false,
 		"If used, shows all apps independant of OS.",
 	)
 	rootCmd.AddCommand(listAllCmd)
