@@ -83,6 +83,72 @@ var listAllCmd = &cobra.Command{
 	},
 }
 
+var listNotInstalledCmd = &cobra.Command{
+	Use:   "ln",
+	Short: "List not installed apps.",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctrl, err := initDB()
+		if err != nil {
+			return err
+		}
+		defer ctrl.instance.Close()
+
+		no, err := cmd.Flags().GetBool("no-os")
+		if err != nil {
+			return err
+		}
+
+		if no {
+			list, err := ctrl.db.FindNotInstalledApps(ctrl.ctx)
+			if err != nil {
+				return err
+			}
+			fmt.Print(listNotInstalled(list))
+		} else {
+			list, err := ctrl.db.FindNotInstalledAppsOS(ctrl.ctx, getOS())
+			if err != nil {
+				return err
+			}
+			fmt.Print(listNotInstalledOS(list))
+		}
+		return nil
+	},
+}
+
+var listInstalledCmd = &cobra.Command{
+	Use:   "li",
+	Short: "List installed apps.",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctrl, err := initDB()
+		if err != nil {
+			return err
+		}
+		defer ctrl.instance.Close()
+
+		no, err := cmd.Flags().GetBool("no-os")
+		if err != nil {
+			return err
+		}
+
+		if no {
+			list, err := ctrl.db.FindInstalledApps(ctrl.ctx)
+			if err != nil {
+				return err
+			}
+			fmt.Print(listInstalled(list))
+		} else {
+			list, err := ctrl.db.FindInstalledAppsOS(ctrl.ctx, getOS())
+			if err != nil {
+				return err
+			}
+			fmt.Print(listInstalledOS(list))
+		}
+		return nil
+	},
+}
+
 func init() {
 	addCmd.Flags().StringP(
 		"name",
@@ -105,4 +171,20 @@ func init() {
 		"If used, shows all apps independant of OS.",
 	)
 	rootCmd.AddCommand(listAllCmd)
+
+	listNotInstalledCmd.Flags().BoolP(
+		"no-os",
+		"o",
+		false,
+		"If used, show not installed apps independant of OS.",
+	)
+	rootCmd.AddCommand(listNotInstalledCmd)
+
+	listInstalledCmd.Flags().BoolP(
+		"no-os",
+		"o",
+		false,
+		"If used, show installed apps independant of OS.",
+	)
+	rootCmd.AddCommand(listInstalledCmd)
 }
