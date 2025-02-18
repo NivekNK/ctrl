@@ -8,7 +8,7 @@ import (
 )
 
 var addCmd = &cobra.Command{
-	Use:   "a ID",
+	Use:   "a [ID]",
 	Short: "Add a new app (not installed).",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
