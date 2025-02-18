@@ -1,13 +1,17 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"ctrl/cmd"
+	_ "embed"
 )
 
+//go:embed .sql/schema.sql
+var schema string
+
 func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	cmd.Execute()
+}
+
+func init() {
+	cmd.Schema = schema
 }

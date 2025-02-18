@@ -17,7 +17,7 @@ INSERT INTO app (
     app_os, 
     app_registry_id, 
     app_last_updated, 
-    app_status, 
+    app_installed, 
     app_version, 
     app_available
 ) 
@@ -27,7 +27,7 @@ VALUES (
     ?, 
     ?, 
     datetime('now', 'utc'), 
-    'not-installed', 
+    0, 
     NULL, 
     NULL
 )
@@ -64,44 +64,103 @@ func (q *Queries) AddRegistryApp(ctx context.Context, arg AddRegistryAppParams) 
 	return err
 }
 
-const findInProgressApps = `-- name: FindInProgressApps :many
+const findAppBySourceAndId = `-- name: FindAppBySourceAndId :one
 SELECT 
-    a.app_index AS "index", 
-    a.app_id AS "id", 
-    r.registry_name AS "name",
-    a.app_os AS "os", 
-    a.app_version AS "version", 
-    a.app_available AS "available",
-    a.app_last_updated AS "last_updated"
-FROM app a
-JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'in-progress'
+    app.app_index AS "index",
+    app.app_id AS "id",
+    registry.registry_name AS "name",
+    app.app_installed AS "installed",
+    app.app_version AS "version",
+    app.app_available AS "available",
+    app.app_last_updated AS "last_updated"
+FROM app
+JOIN registry ON app.app_registry_id = registry.registry_id
+WHERE app.app_source = ? 
+    AND app.app_id = ? 
+    AND app.app_os = ?
+LIMIT 1
 `
 
-type FindInProgressAppsRow struct {
+type FindAppBySourceAndIdParams struct {
+	AppSource string
+	AppID     string
+	AppOs     string
+}
+
+type FindAppBySourceAndIdRow struct {
 	Index       int64
 	ID          string
 	Name        string
-	Os          string
+	Installed   bool
 	Version     sql.NullString
 	Available   sql.NullString
 	LastUpdated string
 }
 
-func (q *Queries) FindInProgressApps(ctx context.Context) ([]FindInProgressAppsRow, error) {
-	rows, err := q.db.QueryContext(ctx, findInProgressApps)
+func (q *Queries) FindAppBySourceAndId(ctx context.Context, arg FindAppBySourceAndIdParams) (FindAppBySourceAndIdRow, error) {
+	row := q.db.QueryRowContext(ctx, findAppBySourceAndId, arg.AppSource, arg.AppID, arg.AppOs)
+	var i FindAppBySourceAndIdRow
+	err := row.Scan(
+		&i.Index,
+		&i.ID,
+		&i.Name,
+		&i.Installed,
+		&i.Version,
+		&i.Available,
+		&i.LastUpdated,
+	)
+	return i, err
+}
+
+const findAppsByNamesGivenText = `-- name: FindAppsByNamesGivenText :many
+SELECT 
+    a.app_index AS "index",
+    a.app_id AS "id",
+    r.registry_name AS "name",
+    a.app_installed AS "installed",
+    a.app_source AS "source",
+    a.app_version AS "version",
+    a.app_available AS "available",
+    a.app_last_updated AS "last_updated"
+FROM app a
+JOIN registry r ON a.app_registry_id = r.registry_id
+WHERE r.registry_name IN (
+    SELECT rs.registry_name FROM registry_search rs WHERE rs.registry_name MATCH ?
+)
+AND a.app_os = ?
+`
+
+type FindAppsByNamesGivenTextParams struct {
+	RegistryName string
+	AppOs        string
+}
+
+type FindAppsByNamesGivenTextRow struct {
+	Index       int64
+	ID          string
+	Name        string
+	Installed   bool
+	Source      string
+	Version     sql.NullString
+	Available   sql.NullString
+	LastUpdated string
+}
+
+func (q *Queries) FindAppsByNamesGivenText(ctx context.Context, arg FindAppsByNamesGivenTextParams) ([]FindAppsByNamesGivenTextRow, error) {
+	rows, err := q.db.QueryContext(ctx, findAppsByNamesGivenText, arg.RegistryName, arg.AppOs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindInProgressAppsRow
+	var items []FindAppsByNamesGivenTextRow
 	for rows.Next() {
-		var i FindInProgressAppsRow
+		var i FindAppsByNamesGivenTextRow
 		if err := rows.Scan(
 			&i.Index,
 			&i.ID,
 			&i.Name,
-			&i.Os,
+			&i.Installed,
+			&i.Source,
 			&i.Version,
 			&i.Available,
 			&i.LastUpdated,
@@ -119,49 +178,23 @@ func (q *Queries) FindInProgressApps(ctx context.Context) ([]FindInProgressAppsR
 	return items, nil
 }
 
-const findInProgressAppsOS = `-- name: FindInProgressAppsOS :many
-SELECT 
-    a.app_index AS "index", 
-    a.app_id AS "id", 
-    r.registry_name AS "name", 
-    a.app_version AS "version", 
-    a.app_available AS "available",
-    a.app_last_updated AS "last_updated"
-FROM app a
-JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'in-progress'
-AND a.app_os = ?
+const findAppsByText = `-- name: FindAppsByText :many
+SELECT registry_name FROM registry_search WHERE registry_name MATCH ?
 `
 
-type FindInProgressAppsOSRow struct {
-	Index       int64
-	ID          string
-	Name        string
-	Version     sql.NullString
-	Available   sql.NullString
-	LastUpdated string
-}
-
-func (q *Queries) FindInProgressAppsOS(ctx context.Context, appOs string) ([]FindInProgressAppsOSRow, error) {
-	rows, err := q.db.QueryContext(ctx, findInProgressAppsOS, appOs)
+func (q *Queries) FindAppsByText(ctx context.Context, registryName string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, findAppsByText, registryName)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindInProgressAppsOSRow
+	var items []string
 	for rows.Next() {
-		var i FindInProgressAppsOSRow
-		if err := rows.Scan(
-			&i.Index,
-			&i.ID,
-			&i.Name,
-			&i.Version,
-			&i.Available,
-			&i.LastUpdated,
-		); err != nil {
+		var registry_name string
+		if err := rows.Scan(&registry_name); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, registry_name)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -178,12 +211,13 @@ SELECT
     a.app_id AS "id",
     r.registry_name AS "name",
     a.app_os AS "os",
+    a.app_source AS "source",
     a.app_version AS "version",
     a.app_available AS "available",
     a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'installed'
+WHERE a.app_installed = 1
 `
 
 type FindInstalledAppsRow struct {
@@ -191,6 +225,7 @@ type FindInstalledAppsRow struct {
 	ID          string
 	Name        string
 	Os          string
+	Source      string
 	Version     sql.NullString
 	Available   sql.NullString
 	LastUpdated string
@@ -210,6 +245,7 @@ func (q *Queries) FindInstalledApps(ctx context.Context) ([]FindInstalledAppsRow
 			&i.ID,
 			&i.Name,
 			&i.Os,
+			&i.Source,
 			&i.Version,
 			&i.Available,
 			&i.LastUpdated,
@@ -229,15 +265,16 @@ func (q *Queries) FindInstalledApps(ctx context.Context) ([]FindInstalledAppsRow
 
 const findInstalledAppsOS = `-- name: FindInstalledAppsOS :many
 SELECT 
-    a.app_index AS "index", 
-    a.app_id AS "id", 
-    r.registry_name AS "name", 
-    a.app_version AS "version", 
+    a.app_index AS "index",
+    a.app_id AS "id",
+    r.registry_name AS "name",
+    a.app_source AS "source",
+    a.app_version AS "version",
     a.app_available AS "available",
     a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'installed'
+WHERE a.app_installed = 1
 AND a.app_os = ?
 `
 
@@ -245,6 +282,7 @@ type FindInstalledAppsOSRow struct {
 	Index       int64
 	ID          string
 	Name        string
+	Source      string
 	Version     sql.NullString
 	Available   sql.NullString
 	LastUpdated string
@@ -263,6 +301,7 @@ func (q *Queries) FindInstalledAppsOS(ctx context.Context, appOs string) ([]Find
 			&i.Index,
 			&i.ID,
 			&i.Name,
+			&i.Source,
 			&i.Version,
 			&i.Available,
 			&i.LastUpdated,
@@ -286,12 +325,13 @@ SELECT
     a.app_id AS "id", 
     r.registry_name AS "name", 
     a.app_os AS "os",
+    a.app_source AS "source",
     a.app_version AS "version", 
     a.app_available AS "available",
     a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'not-installed'
+WHERE a.app_installed = 0
 `
 
 type FindNotInstalledAppsRow struct {
@@ -299,6 +339,7 @@ type FindNotInstalledAppsRow struct {
 	ID          string
 	Name        string
 	Os          string
+	Source      string
 	Version     sql.NullString
 	Available   sql.NullString
 	LastUpdated string
@@ -318,6 +359,7 @@ func (q *Queries) FindNotInstalledApps(ctx context.Context) ([]FindNotInstalledA
 			&i.ID,
 			&i.Name,
 			&i.Os,
+			&i.Source,
 			&i.Version,
 			&i.Available,
 			&i.LastUpdated,
@@ -340,12 +382,13 @@ SELECT
     a.app_index AS "index", 
     a.app_id AS "id", 
     r.registry_name AS "name",
+    a.app_source AS "source",
     a.app_version AS "version", 
     a.app_available AS "available",
     a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'not-installed'
+WHERE a.app_installed = 0
 AND a.app_os = ?
 `
 
@@ -353,6 +396,7 @@ type FindNotInstalledAppsOSRow struct {
 	Index       int64
 	ID          string
 	Name        string
+	Source      string
 	Version     sql.NullString
 	Available   sql.NullString
 	LastUpdated string
@@ -371,6 +415,7 @@ func (q *Queries) FindNotInstalledAppsOS(ctx context.Context, appOs string) ([]F
 			&i.Index,
 			&i.ID,
 			&i.Name,
+			&i.Source,
 			&i.Version,
 			&i.Available,
 			&i.LastUpdated,
@@ -388,27 +433,51 @@ func (q *Queries) FindNotInstalledAppsOS(ctx context.Context, appOs string) ([]F
 	return items, nil
 }
 
+const installedApp = `-- name: InstalledApp :exec
+UPDATE app
+SET 
+    app_installed = 1,
+    app_version = ?,
+    app_available = NULL,
+    app_last_updated = datetime('now', 'utc')
+WHERE app_index = ?
+`
+
+type InstalledAppParams struct {
+	AppVersion sql.NullString
+	AppIndex   int64
+}
+
+func (q *Queries) InstalledApp(ctx context.Context, arg InstalledAppParams) error {
+	_, err := q.db.ExecContext(ctx, installedApp, arg.AppVersion, arg.AppIndex)
+	return err
+}
+
 const listApps = `-- name: ListApps :many
 SELECT 
     a.app_index AS "index", 
     a.app_id AS "id", 
     r.registry_name AS "name", 
     a.app_os AS "os",
-    a.app_status AS "status",
+    a.app_installed AS "installed",
+    a.app_source AS "source",
     a.app_version AS "version", 
-    a.app_available AS "available"
+    a.app_available AS "available",
+    a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
 `
 
 type ListAppsRow struct {
-	Index     int64
-	ID        string
-	Name      string
-	Os        string
-	Status    string
-	Version   sql.NullString
-	Available sql.NullString
+	Index       int64
+	ID          string
+	Name        string
+	Os          string
+	Installed   bool
+	Source      string
+	Version     sql.NullString
+	Available   sql.NullString
+	LastUpdated string
 }
 
 func (q *Queries) ListApps(ctx context.Context) ([]ListAppsRow, error) {
@@ -425,9 +494,11 @@ func (q *Queries) ListApps(ctx context.Context) ([]ListAppsRow, error) {
 			&i.ID,
 			&i.Name,
 			&i.Os,
-			&i.Status,
+			&i.Installed,
+			&i.Source,
 			&i.Version,
 			&i.Available,
+			&i.LastUpdated,
 		); err != nil {
 			return nil, err
 		}
@@ -447,21 +518,25 @@ SELECT
     a.app_index AS "index",
     a.app_id AS "id", 
     r.registry_name AS "name",
-    a.app_status AS "status",
+    a.app_installed AS "installed",
+    a.app_source AS "source",
     a.app_version AS "version", 
-    a.app_available AS "available"
+    a.app_available AS "available",
+    a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
 WHERE a.app_os = ?
 `
 
 type ListAppsOSRow struct {
-	Index     int64
-	ID        string
-	Name      string
-	Status    string
-	Version   sql.NullString
-	Available sql.NullString
+	Index       int64
+	ID          string
+	Name        string
+	Installed   bool
+	Source      string
+	Version     sql.NullString
+	Available   sql.NullString
+	LastUpdated string
 }
 
 func (q *Queries) ListAppsOS(ctx context.Context, appOs string) ([]ListAppsOSRow, error) {
@@ -477,9 +552,11 @@ func (q *Queries) ListAppsOS(ctx context.Context, appOs string) ([]ListAppsOSRow
 			&i.Index,
 			&i.ID,
 			&i.Name,
-			&i.Status,
+			&i.Installed,
+			&i.Source,
 			&i.Version,
 			&i.Available,
+			&i.LastUpdated,
 		); err != nil {
 			return nil, err
 		}
@@ -500,12 +577,13 @@ SELECT
     a.app_id AS "id", 
     r.registry_name AS "name",
     a.app_os AS "os",
+    a.app_source AS "source",
     a.app_version AS "version", 
     a.app_available AS "available",
     a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'installed'
+WHERE a.app_installed = 1
 AND a.app_available IS NOT NULL
 `
 
@@ -514,6 +592,7 @@ type ListUpgradableAppsRow struct {
 	ID          string
 	Name        string
 	Os          string
+	Source      string
 	Version     sql.NullString
 	Available   sql.NullString
 	LastUpdated string
@@ -533,6 +612,7 @@ func (q *Queries) ListUpgradableApps(ctx context.Context) ([]ListUpgradableAppsR
 			&i.ID,
 			&i.Name,
 			&i.Os,
+			&i.Source,
 			&i.Version,
 			&i.Available,
 			&i.LastUpdated,
@@ -552,15 +632,16 @@ func (q *Queries) ListUpgradableApps(ctx context.Context) ([]ListUpgradableAppsR
 
 const listUpgradableAppsOS = `-- name: ListUpgradableAppsOS :many
 SELECT 
-    a.app_index AS "index", 
-    a.app_id AS "id", 
-    r.registry_name AS "name", 
-    a.app_version AS "version", 
+    a.app_index AS "index",
+    a.app_id AS "id",
+    r.registry_name AS "name",
+    a.app_source AS "source",
+    a.app_version AS "version",
     a.app_available AS "available",
     a.app_last_updated AS "last_updated"
 FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
-WHERE a.app_status = 'installed' 
+WHERE a.app_installed = 1 
 AND a.app_os = ?
 AND a.app_available IS NOT NULL
 `
@@ -569,6 +650,7 @@ type ListUpgradableAppsOSRow struct {
 	Index       int64
 	ID          string
 	Name        string
+	Source      string
 	Version     sql.NullString
 	Available   sql.NullString
 	LastUpdated string
@@ -587,6 +669,7 @@ func (q *Queries) ListUpgradableAppsOS(ctx context.Context, appOs string) ([]Lis
 			&i.Index,
 			&i.ID,
 			&i.Name,
+			&i.Source,
 			&i.Version,
 			&i.Available,
 			&i.LastUpdated,
@@ -602,4 +685,33 @@ func (q *Queries) ListUpgradableAppsOS(ctx context.Context, appOs string) ([]Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const syncRegistrySearchApps = `-- name: SyncRegistrySearchApps :exec
+INSERT INTO registry_search (registry_name) SELECT registry_name FROM registry
+`
+
+func (q *Queries) SyncRegistrySearchApps(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, syncRegistrySearchApps)
+	return err
+}
+
+const uninstalledApp = `-- name: UninstalledApp :exec
+UPDATE app
+SET 
+    app_installed = 0,
+    app_version = NULL,
+    app_available = ?,
+    app_last_updated = datetime('now', 'utc')
+WHERE app_index = ?
+`
+
+type UninstalledAppParams struct {
+	AppAvailable sql.NullString
+	AppIndex     int64
+}
+
+func (q *Queries) UninstalledApp(ctx context.Context, arg UninstalledAppParams) error {
+	_, err := q.db.ExecContext(ctx, uninstalledApp, arg.AppAvailable, arg.AppIndex)
+	return err
 }

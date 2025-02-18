@@ -15,12 +15,16 @@ type App struct {
 	AppOs          string
 	AppRegistryID  string
 	AppLastUpdated string
-	AppStatus      string
+	AppInstalled   bool
 	AppVersion     sql.NullString
 	AppAvailable   sql.NullString
 }
 
 type Registry struct {
 	RegistryID   string
+	RegistryName string
+}
+
+type RegistrySearch struct {
 	RegistryName string
 }

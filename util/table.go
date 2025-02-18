@@ -1,4 +1,4 @@
-package main
+package util
 
 import (
 	"ctrl/database"
@@ -31,8 +31,73 @@ func getTable(columns []string, rows [][]string) *table.Table {
 	return t
 }
 
-func listAllTableOS(list []database.ListAppsOSRow) *table.Table {
-	columns := []string{"ID", "Name", "Status", "Version", "Avaiable"}
+func ListAllTableOS(list []database.ListAppsOSRow) *table.Table {
+	columns := []string{"ID", "Name", "Status", "Source", "Version", "Avaiable", "Last Updated"}
+	var rows [][]string
+	for _, app := range list {
+		version := "-"
+		if app.Version.Valid {
+			version = app.Version.String
+		}
+
+		available := "-"
+		if app.Available.Valid {
+			available = app.Available.String
+		}
+
+		status := "Not Installed"
+		if app.Installed {
+			status = "Installed"
+		}
+
+		rows = append(rows, []string{
+			app.ID,
+			app.Name,
+			status,
+			app.Source,
+			version,
+			available,
+			app.LastUpdated,
+		})
+	}
+	return getTable(columns, rows)
+}
+
+func ListAllTable(list []database.ListAppsRow) *table.Table {
+	columns := []string{"ID", "Name", "OS", "Status", "Source", "Version", "Avaiable", "Last Updated"}
+	var rows [][]string
+	for _, app := range list {
+		version := "-"
+		if app.Version.Valid {
+			version = app.Version.String
+		}
+
+		available := "-"
+		if app.Available.Valid {
+			available = app.Available.String
+		}
+
+		status := "Not Installed"
+		if app.Installed {
+			status = "Installed"
+		}
+
+		rows = append(rows, []string{
+			app.ID,
+			app.Name,
+			app.Os,
+			status,
+			app.Source,
+			version,
+			available,
+			app.LastUpdated,
+		})
+	}
+	return getTable(columns, rows)
+}
+
+func ListNotInstalledOS(list []database.FindNotInstalledAppsOSRow) *table.Table {
+	columns := []string{"ID", "Name", "Source", "Version", "Avaiable", "Last Updated"}
 	var rows [][]string
 	for _, app := range list {
 		version := "-"
@@ -48,16 +113,17 @@ func listAllTableOS(list []database.ListAppsOSRow) *table.Table {
 		rows = append(rows, []string{
 			app.ID,
 			app.Name,
-			app.Status,
+			app.Source,
 			version,
 			available,
+			app.LastUpdated,
 		})
 	}
 	return getTable(columns, rows)
 }
 
-func listAllTable(list []database.ListAppsRow) *table.Table {
-	columns := []string{"ID", "Name", "OS", "Status", "Version", "Avaiable"}
+func ListNotInstalled(list []database.FindNotInstalledAppsRow) *table.Table {
+	columns := []string{"ID", "Name", "OS", "Source", "Version", "Avaiable", "Last Updated"}
 	var rows [][]string
 	for _, app := range list {
 		version := "-"
@@ -74,16 +140,17 @@ func listAllTable(list []database.ListAppsRow) *table.Table {
 			app.ID,
 			app.Name,
 			app.Os,
-			app.Status,
+			app.Source,
 			version,
 			available,
+			app.LastUpdated,
 		})
 	}
 	return getTable(columns, rows)
 }
 
-func listNotInstalledOS(list []database.FindNotInstalledAppsOSRow) *table.Table {
-	columns := []string{"ID", "Name", "Version", "Avaiable", "Last Updated"}
+func ListInstalledOS(list []database.FindInstalledAppsOSRow) *table.Table {
+	columns := []string{"ID", "Name", "Source", "Version", "Avaiable", "Last Updated"}
 	var rows [][]string
 	for _, app := range list {
 		version := "-"
@@ -99,6 +166,7 @@ func listNotInstalledOS(list []database.FindNotInstalledAppsOSRow) *table.Table 
 		rows = append(rows, []string{
 			app.ID,
 			app.Name,
+			app.Source,
 			version,
 			available,
 			app.LastUpdated,
@@ -107,8 +175,8 @@ func listNotInstalledOS(list []database.FindNotInstalledAppsOSRow) *table.Table 
 	return getTable(columns, rows)
 }
 
-func listNotInstalled(list []database.FindNotInstalledAppsRow) *table.Table {
-	columns := []string{"ID", "Name", "OS", "Version", "Avaiable", "Last Updated"}
+func ListInstalled(list []database.FindInstalledAppsRow) *table.Table {
+	columns := []string{"ID", "Name", "OS", "Source", "Version", "Avaiable", "Last Updated"}
 	var rows [][]string
 	for _, app := range list {
 		version := "-"
@@ -125,57 +193,7 @@ func listNotInstalled(list []database.FindNotInstalledAppsRow) *table.Table {
 			app.ID,
 			app.Name,
 			app.Os,
-			version,
-			available,
-			app.LastUpdated,
-		})
-	}
-	return getTable(columns, rows)
-}
-
-func listInstalledOS(list []database.FindInstalledAppsOSRow) *table.Table {
-	columns := []string{"ID", "Name", "Version", "Avaiable", "Last Updated"}
-	var rows [][]string
-	for _, app := range list {
-		version := "-"
-		if app.Version.Valid {
-			version = app.Version.String
-		}
-
-		available := "-"
-		if app.Available.Valid {
-			available = app.Available.String
-		}
-
-		rows = append(rows, []string{
-			app.ID,
-			app.Name,
-			version,
-			available,
-			app.LastUpdated,
-		})
-	}
-	return getTable(columns, rows)
-}
-
-func listInstalled(list []database.FindInstalledAppsRow) *table.Table {
-	columns := []string{"ID", "Name", "OS", "Version", "Avaiable", "Last Updated"}
-	var rows [][]string
-	for _, app := range list {
-		version := "-"
-		if app.Version.Valid {
-			version = app.Version.String
-		}
-
-		available := "-"
-		if app.Available.Valid {
-			available = app.Available.String
-		}
-
-		rows = append(rows, []string{
-			app.ID,
-			app.Name,
-			app.Os,
+			app.Source,
 			version,
 			available,
 			app.LastUpdated,
