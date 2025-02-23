@@ -48,10 +48,15 @@ func init() {
 		"Specify a name for the app.",
 	)
 
+	config, err := util.LoadConfig()
+	if err != nil {
+		panic(err)
+	}
+
 	addCmd.Flags().StringP(
 		"source",
 		"s",
-		Config.GetDefaultSourceKey(),
+		config.GetDefaultSourceKey(),
 		"Specify a source installer for the app.",
 	)
 	rootCmd.AddCommand(addCmd)

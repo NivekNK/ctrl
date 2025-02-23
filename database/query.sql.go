@@ -433,6 +433,48 @@ func (q *Queries) FindNotInstalledAppsOS(ctx context.Context, appOs string) ([]F
 	return items, nil
 }
 
+const installApp = `-- name: InstallApp :exec
+INSERT INTO app (
+    app_id, 
+    app_source, 
+    app_os, 
+    app_registry_id, 
+    app_last_updated, 
+    app_installed, 
+    app_version, 
+    app_available
+) 
+VALUES (
+    ?, 
+    ?, 
+    ?, 
+    ?, 
+    datetime('now', 'utc'), 
+    1, 
+    ?, 
+    NULL
+)
+`
+
+type InstallAppParams struct {
+	AppID         string
+	AppSource     string
+	AppOs         string
+	AppRegistryID string
+	AppVersion    sql.NullString
+}
+
+func (q *Queries) InstallApp(ctx context.Context, arg InstallAppParams) error {
+	_, err := q.db.ExecContext(ctx, installApp,
+		arg.AppID,
+		arg.AppSource,
+		arg.AppOs,
+		arg.AppRegistryID,
+		arg.AppVersion,
+	)
+	return err
+}
+
 const listApps = `-- name: ListApps :many
 SELECT 
     a.app_index AS "index", 
@@ -698,18 +740,19 @@ UPDATE app
 SET 
     app_installed = 1,
     app_version = ?,
-    app_available = NULL,
+    app_available = ?,
     app_last_updated = datetime('now', 'utc')
 WHERE app_index = ?
 `
 
 type UpdateInstalledAppParams struct {
-	AppVersion sql.NullString
-	AppIndex   int64
+	AppVersion   sql.NullString
+	AppAvailable sql.NullString
+	AppIndex     int64
 }
 
 func (q *Queries) UpdateInstalledApp(ctx context.Context, arg UpdateInstalledAppParams) error {
-	_, err := q.db.ExecContext(ctx, updateInstalledApp, arg.AppVersion, arg.AppIndex)
+	_, err := q.db.ExecContext(ctx, updateInstalledApp, arg.AppVersion, arg.AppAvailable, arg.AppIndex)
 	return err
 }
 

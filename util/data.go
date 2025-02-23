@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -64,7 +63,7 @@ func LoadData() (*Data, error) {
 		}
 
 		return &data, nil
-	} else if !os.IsNotExist(err) {
+	} else if os.IsNotExist(err) {
 		data := DefaultData()
 
 		err := createData(dataFilePath, data)
@@ -72,6 +71,7 @@ func LoadData() (*Data, error) {
 			return nil, err
 		}
 
+		fmt.Println("data file created!")
 		return data, nil
 	} else {
 		return nil, fmt.Errorf("%w :: %s", ErrLoadingData, err.Error())
@@ -80,68 +80,52 @@ func LoadData() (*Data, error) {
 
 var ErrRefreshError = errors.New("refresh problem")
 
-func (data *Data) ForceRefresh(config *Config, instance *Instance) error {
+func (data *Data) ForceRefresh(config *Config, instance *Instance, fix bool) error {
 	apps, err := instance.Query.ListAppsOS(instance.Ctx, GetOS())
 	if err != nil {
 		return fmt.Errorf("%w :: %s", ErrRefreshError, err.Error())
 	}
 
 	for _, app := range apps {
-		versions, err := config.ExecuteCommand(app.Source, Versions, app.ID)
+		result, err := config.ExecuteCommand(app.Source, Versions, app.ID)
 		if err != nil {
 			return err
 		}
 
-		versionParts := strings.Split(versions, ",")
-		if len(versionParts) != 2 {
-			return fmt.Errorf("%w :: versions command for source (%s) incorrect format", ErrRefreshError, app.Source)
+		versions, err := ParseVersions(result)
+		if err != nil {
+			return err
 		}
 
-		version := versionParts[0]
-		newVersion := versionParts[1]
-
-		if app.Installed {
-			if newVersion == "_" {
-				return nil
-			}
-
-			_, err = config.ExecuteCommand(app.Source, Update, app.ID)
-			if err != nil {
-				return fmt.Errorf("%w :: %s", ErrRefreshError, err.Error())
+		if app.Installed && !fix {
+			if !versions.NewVersion.Valid {
+				continue
 			}
 
 			err = instance.Query.UpdateAvailable(instance.Ctx, database.UpdateAvailableParams{
-				AppAvailable: sql.NullString{String: newVersion},
+				AppAvailable: versions.NewVersion,
 				AppIndex:     app.Index,
 			})
 			if err != nil {
 				return fmt.Errorf("%w :: %s", ErrRefreshError, err.Error())
 			}
-
-			return nil
 		} else {
-			// TODO: FIX THIS SHIT
-			if len(version) == 0 {
-				return fmt.Errorf("%w :: couldnt find app from source (%s) with id: %s", ErrRefreshError, app.Source, app.ID)
-			}
-
 			err = instance.Query.UpdateInstalledApp(instance.Ctx, database.UpdateInstalledAppParams{
-				AppVersion: sql.NullString{String: version},
-				AppIndex:   app.Index,
+				AppVersion:   sql.NullString{String: versions.Version, Valid: true},
+				AppAvailable: versions.NewVersion,
+				AppIndex:     app.Index,
 			})
 			if err != nil {
 				return fmt.Errorf("%w :: %s", ErrRefreshError, err.Error())
 			}
-
-			// Revisar si una app agregada esta instalada, la version y actualizar la avaliable
-			return nil
 		}
 	}
 
+	fmt.Println("Refresh successful!")
 	return nil
 }
 
-func (data *Data) Refresh(config *Config, instance *Instance) error {
+func (data *Data) AdviceRefresh(config *Config) error {
 	if config == nil {
 		return fmt.Errorf("%w :: %s", ErrRefreshError, "invalid config")
 	}
@@ -152,9 +136,23 @@ func (data *Data) Refresh(config *Config, instance *Instance) error {
 	}
 
 	duration := time.Since(lastRefresh)
-	if duration.Hours() < float64(config.DelayRefresh) {
+	if config.Refresh.AdviceDelay == -1 || duration.Hours() < float64(config.Refresh.AdviceDelay) {
 		return nil
 	}
 
-	return data.ForceRefresh(config, instance)
+	if config.Refresh.ForceRefreshDelay != -1 && duration.Hours() >= float64(config.Refresh.ForceRefreshDelay) {
+		ctrl, err := InitializeInstance()
+		if err != nil {
+			return fmt.Errorf("%w :: %s", ErrRefreshError, err.Error())
+		}
+		defer ctrl.DB.Close()
+
+		fmt.Println("The configured time has already passed, forcing refresh...")
+		data.ForceRefresh(config, ctrl, true)
+		return nil
+	}
+
+	fmt.Println("The configured time has already passed, you should refresh!")
+
+	return nil
 }

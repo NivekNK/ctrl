@@ -96,3 +96,45 @@ func (instance *Instance) AddApp(id string, name string, source string) error {
 
 	return tx.Commit()
 }
+
+func (instance *Instance) InstallApp(id string, name string, source string, version string) error {
+	tx, err := instance.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
+	}
+	defer tx.Rollback()
+
+	qtx := instance.Query.WithTx(tx)
+	registryId := uuid.New().String()
+
+	err = qtx.AddRegistryApp(instance.Ctx, database.AddRegistryAppParams{
+		RegistryID:   registryId,
+		RegistryName: name,
+	})
+	if err != nil {
+		switch err.Error() {
+		case "UNIQUE constraint failed: registry.registry_name":
+			return fmt.Errorf("%w :: %s", ErrAddingApp, "app already exists in the database")
+		default:
+			return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
+		}
+	}
+
+	err = qtx.SyncRegistrySearchApps(instance.Ctx)
+	if err != nil {
+		return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
+	}
+
+	err = qtx.InstallApp(instance.Ctx, database.InstallAppParams{
+		AppID:         id,
+		AppSource:     source,
+		AppOs:         GetOS(),
+		AppRegistryID: registryId,
+		AppVersion:    sql.NullString{String: version, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
+	}
+
+	return tx.Commit()
+}

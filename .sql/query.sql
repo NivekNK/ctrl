@@ -140,6 +140,28 @@ VALUES (
     NULL
 );
 
+-- name: InstallApp :exec
+INSERT INTO app (
+    app_id, 
+    app_source, 
+    app_os, 
+    app_registry_id, 
+    app_last_updated, 
+    app_installed, 
+    app_version, 
+    app_available
+) 
+VALUES (
+    ?, 
+    ?, 
+    ?, 
+    ?, 
+    datetime('now', 'utc'), 
+    1, 
+    ?, 
+    NULL
+);
+
 -- name: FindAppBySourceAndId :one
 SELECT 
     app.app_index AS "index",
@@ -181,7 +203,7 @@ UPDATE app
 SET 
     app_installed = 1,
     app_version = ?,
-    app_available = NULL,
+    app_available = ?,
     app_last_updated = datetime('now', 'utc')
 WHERE app_index = ?;
 

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,9 +19,14 @@ type Source struct {
 	Uninstall []string `json:"uninstall"`
 }
 
+type Refresh struct {
+	AdviceDelay       int `json:"advice_delay"`
+	ForceRefreshDelay int `json:"force_refresh_delay"`
+}
+
 type Config struct {
-	Sources      map[string]Source `json:"sources"`
-	DelayRefresh int               `json:"delay_refresh"`
+	Sources map[string]Source `json:"sources"`
+	Refresh Refresh           `json:"refresh"`
 }
 
 var defaultConfig = []byte(`{
@@ -56,7 +62,10 @@ var defaultConfig = []byte(`{
 			]
 		}
 	},
-	"delay_refresh": 168
+	"refresh": {
+		"advice_delay": 168,
+		"force_refresh_delay": 672
+	}
 }`)
 
 func DefaultConfig() *Config {
@@ -204,7 +213,7 @@ func LoadConfig() (*Config, error) {
 
 		fmt.Println("config file updated!")
 		return &config, nil
-	} else if !os.IsNotExist(err) {
+	} else if os.IsNotExist(err) {
 		config := DefaultConfig()
 
 		err := createConfig(configFilePath, config)
@@ -264,22 +273,23 @@ func (config *Config) ExecuteCommand(source string, cmdType CmdType, appId strin
 	switch cmdType {
 	case Versions:
 		commandName = selected.Versions[0]
-		commands = selected.Versions[1:]
+		commands = append([]string{}, selected.Versions[1:]...)
 	case Install:
 		commandName = selected.Install[0]
-		commands = selected.Install[1:]
+		commands = append([]string{}, selected.Install[1:]...)
 	case Update:
 		commandName = selected.Update[0]
-		commands = selected.Update[1:]
+		commands = append([]string{}, selected.Update[1:]...)
 	case Uninstall:
 		commandName = selected.Uninstall[0]
-		commands = selected.Uninstall[1:]
+		commands = append([]string{}, selected.Uninstall[1:]...)
 	default:
 		return "", fmt.Errorf("%w :: wrong cmd type", ErrRefreshError)
 	}
 
 	found := false
 	for i := len(commands) - 1; i >= 0; i-- {
+		fmt.Println(commands[i])
 		if strings.Contains(commands[i], "APP_ID") {
 			commands[i] = strings.Replace(commands[i], "APP_ID", appId, 1)
 			found = true
@@ -298,4 +308,35 @@ func (config *Config) ExecuteCommand(source string, cmdType CmdType, appId strin
 	}
 
 	return string(output), nil
+}
+
+type ParsedVersion struct {
+	Version    string
+	NewVersion sql.NullString
+}
+
+var ErrParseVersion = errors.New("problem parsing versions command")
+
+func ParseVersions(versions string) (*ParsedVersion, error) {
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("%w :: couldn`t find app", ErrParseVersion)
+	}
+
+	versionParts := strings.Split(versions, ",")
+	if len(versionParts) != 2 {
+		return nil, fmt.Errorf("%w :: versions command with incorrect format", ErrParseVersion)
+	}
+
+	newVersion := versionParts[1]
+	var newVersionValue sql.NullString
+	if newVersion != "_" {
+		newVersionValue.String = newVersion
+		newVersionValue.Valid = true
+	}
+
+	parsedVersion := ParsedVersion{
+		Version:    versionParts[0],
+		NewVersion: newVersionValue,
+	}
+	return &parsedVersion, nil
 }
