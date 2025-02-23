@@ -64,6 +64,66 @@ func (q *Queries) AddRegistryApp(ctx context.Context, arg AddRegistryAppParams) 
 	return err
 }
 
+const findAppById = `-- name: FindAppById :many
+SELECT
+    a.app_index AS "index",
+    r.registry_name AS "name",
+    a.app_installed AS "installed",
+    a.app_source AS "source",
+    a.app_version AS "version", 
+    a.app_available AS "available",
+    a.app_last_updated AS "last_updated"
+FROM app a
+JOIN registry r ON a.app_registry_id = r.registry_id
+WHERE a.app_os = ? AND a.app_id = ?
+`
+
+type FindAppByIdParams struct {
+	AppOs string
+	AppID string
+}
+
+type FindAppByIdRow struct {
+	Index       int64
+	Name        string
+	Installed   bool
+	Source      string
+	Version     sql.NullString
+	Available   sql.NullString
+	LastUpdated string
+}
+
+func (q *Queries) FindAppById(ctx context.Context, arg FindAppByIdParams) ([]FindAppByIdRow, error) {
+	rows, err := q.db.QueryContext(ctx, findAppById, arg.AppOs, arg.AppID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindAppByIdRow
+	for rows.Next() {
+		var i FindAppByIdRow
+		if err := rows.Scan(
+			&i.Index,
+			&i.Name,
+			&i.Installed,
+			&i.Source,
+			&i.Version,
+			&i.Available,
+			&i.LastUpdated,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findAppBySourceAndId = `-- name: FindAppBySourceAndId :one
 SELECT 
     app.app_index AS "index",
@@ -435,24 +495,24 @@ func (q *Queries) FindNotInstalledAppsOS(ctx context.Context, appOs string) ([]F
 
 const installApp = `-- name: InstallApp :exec
 INSERT INTO app (
-    app_id, 
-    app_source, 
-    app_os, 
-    app_registry_id, 
-    app_last_updated, 
-    app_installed, 
-    app_version, 
+    app_id,
+    app_source,
+    app_os,
+    app_registry_id,
+    app_last_updated,
+    app_installed,
+    app_version,
     app_available
-) 
+)
 VALUES (
-    ?, 
-    ?, 
-    ?, 
-    ?, 
-    datetime('now', 'utc'), 
-    1, 
-    ?, 
-    NULL
+    ?,
+    ?,
+    ?,
+    ?,
+    datetime('now', 'utc'),
+    1,
+    ?,
+    ?
 )
 `
 
@@ -462,6 +522,7 @@ type InstallAppParams struct {
 	AppOs         string
 	AppRegistryID string
 	AppVersion    sql.NullString
+	AppAvailable  sql.NullString
 }
 
 func (q *Queries) InstallApp(ctx context.Context, arg InstallAppParams) error {
@@ -471,6 +532,7 @@ func (q *Queries) InstallApp(ctx context.Context, arg InstallAppParams) error {
 		arg.AppOs,
 		arg.AppRegistryID,
 		arg.AppVersion,
+		arg.AppAvailable,
 	)
 	return err
 }

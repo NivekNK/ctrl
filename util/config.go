@@ -60,6 +60,38 @@ var defaultConfig = []byte(`{
 				"uninstall",
 				"APP_ID"
 			]
+		},
+		"scoop": {
+			"versions": [
+				"pwsh",
+				"-c",
+				"$scoopApp = \"APP_ID\";",
+				"$scoopInfo = scoop info $scoopApp;",
+				"if ($LASTEXITCODE -ne 0) { \"\" } else {",
+				"    if ($scoopInfo.Version -match \"Update\") {",
+				"        $array = $scoopInfo.Version -split \"\\s+\";",
+				"        $array[0] + \",\" + $array[3] ",
+				"    } else { $scoopInfo.Version + \",_\" }",
+				"}"
+			],
+			"install": [
+				"pwsh",
+				"-c",
+				"$scoopApp = \"APP_ID\";",
+				"$scoopBucket = $scoopApp.Split('/')[0];",
+				"scoop bucket add $scoopBucket;",
+				"scoop install $scoopApp;"
+			],
+			"update": [
+				"scoop",
+				"update",
+				"APP_ID"
+			],
+			"uninstall": [
+				"scoop",
+				"uninstall",
+				"APP_ID"
+			]
 		}
 	},
 	"refresh": {
@@ -289,7 +321,6 @@ func (config *Config) ExecuteCommand(source string, cmdType CmdType, appId strin
 
 	found := false
 	for i := len(commands) - 1; i >= 0; i-- {
-		fmt.Println(commands[i])
 		if strings.Contains(commands[i], "APP_ID") {
 			commands[i] = strings.Replace(commands[i], "APP_ID", appId, 1)
 			found = true

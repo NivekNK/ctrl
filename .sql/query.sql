@@ -26,6 +26,19 @@ FROM app a
 JOIN registry r ON a.app_registry_id = r.registry_id
 WHERE a.app_os = ?;
 
+-- name: FindAppById :many
+SELECT
+    a.app_index AS "index",
+    r.registry_name AS "name",
+    a.app_installed AS "installed",
+    a.app_source AS "source",
+    a.app_version AS "version", 
+    a.app_available AS "available",
+    a.app_last_updated AS "last_updated"
+FROM app a
+JOIN registry r ON a.app_registry_id = r.registry_id
+WHERE a.app_os = ? AND a.app_id = ?;
+
 -- name: FindNotInstalledApps :many
 SELECT 
     a.app_index AS "index", 
@@ -142,24 +155,24 @@ VALUES (
 
 -- name: InstallApp :exec
 INSERT INTO app (
-    app_id, 
-    app_source, 
-    app_os, 
-    app_registry_id, 
-    app_last_updated, 
-    app_installed, 
-    app_version, 
+    app_id,
+    app_source,
+    app_os,
+    app_registry_id,
+    app_last_updated,
+    app_installed,
+    app_version,
     app_available
-) 
+)
 VALUES (
-    ?, 
-    ?, 
-    ?, 
-    ?, 
-    datetime('now', 'utc'), 
-    1, 
-    ?, 
-    NULL
+    ?,
+    ?,
+    ?,
+    ?,
+    datetime('now', 'utc'),
+    1,
+    ?,
+    ?
 );
 
 -- name: FindAppBySourceAndId :one

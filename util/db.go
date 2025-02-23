@@ -97,7 +97,7 @@ func (instance *Instance) AddApp(id string, name string, source string) error {
 	return tx.Commit()
 }
 
-func (instance *Instance) InstallApp(id string, name string, source string, version string) error {
+func (instance *Instance) InstallApp(id string, name string, source string, version string, newVersion sql.NullString) error {
 	tx, err := instance.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
@@ -131,6 +131,7 @@ func (instance *Instance) InstallApp(id string, name string, source string, vers
 		AppOs:         GetOS(),
 		AppRegistryID: registryId,
 		AppVersion:    sql.NullString{String: version, Valid: true},
+		AppAvailable:  newVersion,
 	})
 	if err != nil {
 		return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
