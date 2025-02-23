@@ -12,11 +12,11 @@ var listInstalledCmd = &cobra.Command{
 	Short: "List installed apps.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctrl, err := InitializeInstance()
+		ctrl, err := util.InitializeInstance()
 		if err != nil {
 			return err
 		}
-		defer ctrl.db.Close()
+		defer ctrl.DB.Close()
 
 		no, err := cmd.Flags().GetBool("no-os")
 		if err != nil {
@@ -24,13 +24,13 @@ var listInstalledCmd = &cobra.Command{
 		}
 
 		if no {
-			list, err := ctrl.query.FindInstalledApps(ctrl.ctx)
+			list, err := ctrl.Query.FindInstalledApps(ctrl.Ctx)
 			if err != nil {
 				return err
 			}
 			fmt.Print(util.ListInstalled(list))
 		} else {
-			list, err := ctrl.query.FindInstalledAppsOS(ctrl.ctx, util.GetOS())
+			list, err := ctrl.Query.FindInstalledAppsOS(ctrl.Ctx, util.GetOS())
 			if err != nil {
 				return err
 			}

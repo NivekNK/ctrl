@@ -433,26 +433,6 @@ func (q *Queries) FindNotInstalledAppsOS(ctx context.Context, appOs string) ([]F
 	return items, nil
 }
 
-const installedApp = `-- name: InstalledApp :exec
-UPDATE app
-SET 
-    app_installed = 1,
-    app_version = ?,
-    app_available = NULL,
-    app_last_updated = datetime('now', 'utc')
-WHERE app_index = ?
-`
-
-type InstalledAppParams struct {
-	AppVersion sql.NullString
-	AppIndex   int64
-}
-
-func (q *Queries) InstalledApp(ctx context.Context, arg InstalledAppParams) error {
-	_, err := q.db.ExecContext(ctx, installedApp, arg.AppVersion, arg.AppIndex)
-	return err
-}
-
 const listApps = `-- name: ListApps :many
 SELECT 
     a.app_index AS "index", 
@@ -696,7 +676,88 @@ func (q *Queries) SyncRegistrySearchApps(ctx context.Context) error {
 	return err
 }
 
-const uninstalledApp = `-- name: UninstalledApp :exec
+const updateAvailable = `-- name: UpdateAvailable :exec
+UPDATE app
+SET
+    app_available = ?
+WHERE app_index = ?
+`
+
+type UpdateAvailableParams struct {
+	AppAvailable sql.NullString
+	AppIndex     int64
+}
+
+func (q *Queries) UpdateAvailable(ctx context.Context, arg UpdateAvailableParams) error {
+	_, err := q.db.ExecContext(ctx, updateAvailable, arg.AppAvailable, arg.AppIndex)
+	return err
+}
+
+const updateInstalledApp = `-- name: UpdateInstalledApp :exec
+UPDATE app
+SET 
+    app_installed = 1,
+    app_version = ?,
+    app_available = NULL,
+    app_last_updated = datetime('now', 'utc')
+WHERE app_index = ?
+`
+
+type UpdateInstalledAppParams struct {
+	AppVersion sql.NullString
+	AppIndex   int64
+}
+
+func (q *Queries) UpdateInstalledApp(ctx context.Context, arg UpdateInstalledAppParams) error {
+	_, err := q.db.ExecContext(ctx, updateInstalledApp, arg.AppVersion, arg.AppIndex)
+	return err
+}
+
+const updateName = `-- name: UpdateName :exec
+UPDATE registry
+SET registry_name = ?
+WHERE registry_id = (
+    SELECT app_registry_id FROM app WHERE app_index = ?
+)
+`
+
+type UpdateNameParams struct {
+	RegistryName string
+	AppIndex     int64
+}
+
+func (q *Queries) UpdateName(ctx context.Context, arg UpdateNameParams) error {
+	_, err := q.db.ExecContext(ctx, updateName, arg.RegistryName, arg.AppIndex)
+	return err
+}
+
+const updateSource = `-- name: UpdateSource :exec
+UPDATE app
+SET
+    app_id = ?,
+    app_source = ?,
+    app_available = ?
+WHERE app_index = ? AND app_installed = 0
+`
+
+type UpdateSourceParams struct {
+	AppID        string
+	AppSource    string
+	AppAvailable sql.NullString
+	AppIndex     int64
+}
+
+func (q *Queries) UpdateSource(ctx context.Context, arg UpdateSourceParams) error {
+	_, err := q.db.ExecContext(ctx, updateSource,
+		arg.AppID,
+		arg.AppSource,
+		arg.AppAvailable,
+		arg.AppIndex,
+	)
+	return err
+}
+
+const updateUninstalledApp = `-- name: UpdateUninstalledApp :exec
 UPDATE app
 SET 
     app_installed = 0,
@@ -706,12 +767,12 @@ SET
 WHERE app_index = ?
 `
 
-type UninstalledAppParams struct {
+type UpdateUninstalledAppParams struct {
 	AppAvailable sql.NullString
 	AppIndex     int64
 }
 
-func (q *Queries) UninstalledApp(ctx context.Context, arg UninstalledAppParams) error {
-	_, err := q.db.ExecContext(ctx, uninstalledApp, arg.AppAvailable, arg.AppIndex)
+func (q *Queries) UpdateUninstalledApp(ctx context.Context, arg UpdateUninstalledAppParams) error {
+	_, err := q.db.ExecContext(ctx, updateUninstalledApp, arg.AppAvailable, arg.AppIndex)
 	return err
 }

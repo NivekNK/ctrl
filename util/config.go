@@ -6,28 +6,56 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type Source struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
+	Versions  []string `json:"versions"`
+	Install   []string `json:"install"`
+	Update    []string `json:"update"`
+	Uninstall []string `json:"uninstall"`
 }
 
 type Config struct {
-	Sources      []Source `json:"sources"`
-	DelayRefresh int      `json:"delay_refresh"`
+	Sources      map[string]Source `json:"sources"`
+	DelayRefresh int               `json:"delay_refresh"`
 }
 
 var defaultConfig = []byte(`{
-	"sources": [
-		{
-			"command": "winget",
-			"args": [
-				"install"
+	"sources": {
+		"winget": {
+			"versions": [
+				"pwsh",
+				"-c",
+				"$wingetApp = \"APP_ID\";",
+				"$wingetList = winget list $wingetApp;",
+				"if ($wingetList -match \"No installed package found matching input criteria.\") { \"\" } else {",
+				"    $array = $wingetList[$wingetList.Length - 1] -split \"\\s+\";",
+				"    [array]::Reverse($array);",
+				"    $count = ($wingetList[$wingetList.Length - 3] -split \"\\s+\").Length;",
+				"    if ($count -ge 5) { $array[2] + \",\" + $array[1] } else { $array[1] + \",_\" }",
+				"}"
+			],
+			"install": [
+				"winget",
+				"install",
+				"APP_ID"
+			],
+			"update": [
+				"winget",
+				"upgrade",
+				"--id",
+				"APP_ID"
+			],
+			"uninstall": [
+				"winget",
+				"uninstall",
+				"APP_ID"
 			]
 		}
-	],
+	},
 	"delay_refresh": 168
 }`)
 
@@ -43,8 +71,8 @@ func DefaultConfig() *Config {
 
 var ErrLoadingConfig = errors.New("couldnt load ctrl config")
 
-func createConfig(configPath string, config *Config) error {
-	configFile, err := os.Create(filepath.Join(configPath, "/config.json"))
+func createConfig(configFilePath string, config *Config) error {
+	configFile, err := os.Create(configFilePath)
 	if err != nil {
 		return fmt.Errorf("%w :: %s", ErrLoadingConfig, err.Error())
 	}
@@ -179,7 +207,7 @@ func LoadConfig() (*Config, error) {
 	} else if !os.IsNotExist(err) {
 		config := DefaultConfig()
 
-		err := createConfig(configPath, config)
+		err := createConfig(configFilePath, config)
 		if err != nil {
 			return nil, err
 		}
@@ -189,4 +217,85 @@ func LoadConfig() (*Config, error) {
 	} else {
 		return nil, fmt.Errorf("%w :: %s", ErrLoadingConfig, err.Error())
 	}
+}
+
+func (config *Config) GetDefaultSourceKey() string {
+	var defaultKey string = ""
+	for key := range config.Sources {
+		defaultKey = key
+		break
+	}
+	return defaultKey
+}
+
+type CmdType int
+
+const (
+	Versions CmdType = iota
+	Install
+	Update
+	Uninstall
+)
+
+func (cmdType CmdType) String() string {
+	switch cmdType {
+	case Versions:
+		return "Versions"
+	case Install:
+		return "Install"
+	case Update:
+		return "Update"
+	case Uninstall:
+		return "Uninstall"
+	default:
+		return "Invalid"
+	}
+}
+
+func (config *Config) ExecuteCommand(source string, cmdType CmdType, appId string) (string, error) {
+	selected, exists := config.Sources[source]
+	if !exists {
+		return "", fmt.Errorf("%w :: not configured app source (%s) in app: %s", ErrRefreshError, source, appId)
+	}
+
+	var commandName string
+	var commands []string
+
+	switch cmdType {
+	case Versions:
+		commandName = selected.Versions[0]
+		commands = selected.Versions[1:]
+	case Install:
+		commandName = selected.Install[0]
+		commands = selected.Install[1:]
+	case Update:
+		commandName = selected.Update[0]
+		commands = selected.Update[1:]
+	case Uninstall:
+		commandName = selected.Uninstall[0]
+		commands = selected.Uninstall[1:]
+	default:
+		return "", fmt.Errorf("%w :: wrong cmd type", ErrRefreshError)
+	}
+
+	found := false
+	for i := len(commands) - 1; i >= 0; i-- {
+		if strings.Contains(commands[i], "APP_ID") {
+			commands[i] = strings.Replace(commands[i], "APP_ID", appId, 1)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return "", fmt.Errorf("%w :: cmd type doesn`t have app_id: %s", ErrRefreshError, cmdType.String())
+	}
+
+	command := exec.Command(commandName, commands...)
+	output, err := command.Output()
+	if err != nil {
+		return "", fmt.Errorf("%w :: %s", ErrRefreshError, err.Error())
+	}
+
+	return string(output), nil
 }

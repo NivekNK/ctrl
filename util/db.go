@@ -1,9 +1,8 @@
-package cmd
+package util
 
 import (
 	"context"
 	"ctrl/database"
-	"ctrl/util"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -13,12 +12,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var Schema string
+var Schema *string
 
 type Instance struct {
-	db    *sql.DB
-	ctx   context.Context
-	query *database.Queries
+	DB    *sql.DB
+	Ctx   context.Context
+	Query *database.Queries
 }
 
 func tablesExists(db *sql.DB) bool {
@@ -31,7 +30,7 @@ func tablesExists(db *sql.DB) bool {
 var ErrCreatingDatabase = errors.New("couldnt create database")
 
 func InitializeInstance() (*Instance, error) {
-	dataPath, err := util.DataPath()
+	dataPath, err := DataPath()
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +42,7 @@ func InitializeInstance() (*Instance, error) {
 
 	ctx := context.Background()
 	if !tablesExists(db) {
-		if _, err := db.ExecContext(ctx, Schema); err != nil {
+		if _, err := db.ExecContext(ctx, *Schema); err != nil {
 			return nil, fmt.Errorf("%w :: %s", ErrCreatingDatabase, err)
 		}
 		fmt.Println("ctrl sqlite tables created!")
@@ -58,16 +57,16 @@ func InitializeInstance() (*Instance, error) {
 var ErrAddingApp = errors.New("couldnt add app to database")
 
 func (instance *Instance) AddApp(id string, name string, source string) error {
-	tx, err := instance.db.Begin()
+	tx, err := instance.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
 	}
 	defer tx.Rollback()
 
-	qtx := instance.query.WithTx(tx)
+	qtx := instance.Query.WithTx(tx)
 	registryId := uuid.New().String()
 
-	err = qtx.AddRegistryApp(instance.ctx, database.AddRegistryAppParams{
+	err = qtx.AddRegistryApp(instance.Ctx, database.AddRegistryAppParams{
 		RegistryID:   registryId,
 		RegistryName: name,
 	})
@@ -80,15 +79,15 @@ func (instance *Instance) AddApp(id string, name string, source string) error {
 		}
 	}
 
-	err = qtx.SyncRegistrySearchApps(instance.ctx)
+	err = qtx.SyncRegistrySearchApps(instance.Ctx)
 	if err != nil {
 		return fmt.Errorf("%w :: %s", ErrAddingApp, err.Error())
 	}
 
-	err = qtx.AddApp(instance.ctx, database.AddAppParams{
+	err = qtx.AddApp(instance.Ctx, database.AddAppParams{
 		AppID:         id,
 		AppSource:     source,
-		AppOs:         util.GetOS(),
+		AppOs:         GetOS(),
 		AppRegistryID: registryId,
 	})
 	if err != nil {

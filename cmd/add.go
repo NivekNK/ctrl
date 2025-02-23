@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"ctrl/util"
-	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -12,11 +11,11 @@ var addCmd = &cobra.Command{
 	Short: "Add a new app (not installed).",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctrl, err := InitializeInstance()
+		ctrl, err := util.InitializeInstance()
 		if err != nil {
 			return err
 		}
-		defer ctrl.db.Close()
+		defer ctrl.DB.Close()
 
 		id := args[0]
 		name, err := cmd.Flags().GetString("name")
@@ -49,19 +48,10 @@ func init() {
 		"Specify a name for the app.",
 	)
 
-	var command string = ""
-
-	config, err := util.LoadConfig()
-	if err != nil {
-		fmt.Println(err.Error())
-	} else if len(config.Sources) > 0 {
-		command = config.Sources[0].Command
-	}
-
 	addCmd.Flags().StringP(
 		"source",
 		"s",
-		command,
+		Config.GetDefaultSourceKey(),
 		"Specify a source installer for the app.",
 	)
 	rootCmd.AddCommand(addCmd)

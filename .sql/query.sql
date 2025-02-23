@@ -176,7 +176,7 @@ WHERE r.registry_name IN (
 )
 AND a.app_os = ?;
 
--- name: InstalledApp :exec
+-- name: UpdateInstalledApp :exec
 UPDATE app
 SET 
     app_installed = 1,
@@ -185,11 +185,32 @@ SET
     app_last_updated = datetime('now', 'utc')
 WHERE app_index = ?;
 
--- name: UninstalledApp :exec
+-- name: UpdateUninstalledApp :exec
 UPDATE app
 SET 
     app_installed = 0,
     app_version = NULL,
     app_available = ?,
     app_last_updated = datetime('now', 'utc')
+WHERE app_index = ?;
+
+-- name: UpdateSource :exec
+UPDATE app
+SET
+    app_id = ?,
+    app_source = ?,
+    app_available = ?
+WHERE app_index = ? AND app_installed = 0;
+
+-- name: UpdateName :exec
+UPDATE registry
+SET registry_name = ?
+WHERE registry_id = (
+    SELECT app_registry_id FROM app WHERE app_index = ?
+);
+
+-- name: UpdateAvailable :exec
+UPDATE app
+SET
+    app_available = ?
 WHERE app_index = ?;

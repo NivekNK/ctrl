@@ -12,11 +12,11 @@ var listAllCmd = &cobra.Command{
 	Short: "List all apps.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctrl, err := InitializeInstance()
+		ctrl, err := util.InitializeInstance()
 		if err != nil {
 			return err
 		}
-		defer ctrl.db.Close()
+		defer ctrl.DB.Close()
 
 		no, err := cmd.Flags().GetBool("no-os")
 		if err != nil {
@@ -24,13 +24,13 @@ var listAllCmd = &cobra.Command{
 		}
 
 		if no {
-			list, err := ctrl.query.ListApps(ctrl.ctx)
+			list, err := ctrl.Query.ListApps(ctrl.Ctx)
 			if err != nil {
 				return err
 			}
 			fmt.Print(util.ListAllTable(list))
 		} else {
-			list, err := ctrl.query.ListAppsOS(ctrl.ctx, util.GetOS())
+			list, err := ctrl.Query.ListAppsOS(ctrl.Ctx, util.GetOS())
 			if err != nil {
 				return err
 			}
